@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<projectDescription>
+	<name>kinoserver</name>
+	<comment></comment>
+	<projects>
+	</projects>
+	<buildSpec>
+	</buildSpec>
+	<natures>
+	</natures>
+	<linkedResources>
+		<link>
+			<name>src/main/java/LocalhostDBConnection.java</name>
+			<type>1</type>
+			<location>C:/Users/Leschuk/workspace/dima/src/newsparserconnection/LocalhostDBConnection.java</location>
+		</link>
+	</linkedResources>
+</projectDescription>
