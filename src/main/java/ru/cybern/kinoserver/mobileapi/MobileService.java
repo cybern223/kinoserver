@@ -6,18 +6,24 @@ import ru.cybern.kinoserver.mobileapi.controllers.IFilmBean;
 import ru.cybern.kinoserver.mobileapi.controllers.IMusicBean;
 import ru.cybern.kinoserver.mobileapi.controllers.IParserBean;
 import ru.cybern.kinoserver.mobileapi.controllers.IUserBean;
+import ru.cybern.kinoserver.mobileapi.db.entities.FavoritesEntity;
 import ru.cybern.kinoserver.mobileapi.db.entities.FilmEntity;
 import ru.cybern.kinoserver.mobileapi.db.entities.FilmHistoryEntity;
 import ru.cybern.kinoserver.mobileapi.db.entities.FilmMusicEntity;
 import ru.cybern.kinoserver.mobileapi.db.entities.MusicEntity;
+import ru.cybern.kinoserver.mobileapi.db.entities.MusicRatingEntity;
 import ru.cybern.kinoserver.mobileapi.db.entities.PerformerEntity;
+import ru.cybern.kinoserver.mobileapi.db.entities.UserEntity;
+import ru.cybern.kinoserver.mobileapi.dto.Favorites;
 import ru.cybern.kinoserver.mobileapi.dto.Film;
 import ru.cybern.kinoserver.mobileapi.dto.FilmMusic;
 import ru.cybern.kinoserver.mobileapi.dto.Music;
+import ru.cybern.kinoserver.mobileapi.dto.MusicRating;
 import ru.cybern.kinoserver.mobileapi.dto.Performer;
 import ru.cybern.kinoserver.mobileapi.dto.Update;
 import ru.cybern.kinoserver.mobileapi.dto.Update.Method;
 import ru.cybern.kinoserver.mobileapi.dto.UpdateResponse;
+import ru.cybern.kinoserver.mobileapi.dto.User;
 import ru.cybern.kinoserver.mobileapi.dto.UserData;
 import ru.cybern.kinoserver.parsers.Global;
 
@@ -65,8 +71,7 @@ public class MobileService {
     @Inject
     ParserManager manager;
 
-    public static final String INIT_DATE = "2014-01-01";
-
+    public static final Long INIT_DATE = 671534305000L;
 
     public Performer getPerformerFrom(PerformerEntity performerEntity) {
         Performer performer = new Performer();
@@ -92,6 +97,42 @@ public class MobileService {
         filmDto.setYear(filmEntity.getYear());
         return filmDto;
     }
+
+    public User getUserFrom(UserEntity userEntity) {
+        User userDto = new User();
+        userDto.setId(userEntity.getId());
+        userDto.setName(userEntity.getName());
+        return userDto;
+    }
+
+    public List<Favorites> getFavoritesFrom(List<FavoritesEntity> entities) {
+        List<Favorites> list = new LinkedList<>();
+        for(FavoritesEntity entity : entities) {
+            Favorites favoritesDto = new Favorites();
+            favoritesDto.setId(entity.getId());
+            favoritesDto.setDateTime(entity.getDateTime());
+            favoritesDto.setMusic(getMusicFrom(entity.getMusic()));
+            favoritesDto.setUser(getUserFrom(entity.getUser()));
+            list.add(favoritesDto);
+        }
+        return list;
+    }
+
+    public List<MusicRating> getMusicRatingFrom(List<MusicRatingEntity> entities) {
+        List<MusicRating> list = new LinkedList<>();
+        for(MusicRatingEntity entity : entities) {
+            MusicRating dto = new MusicRating();
+            dto.setId(entity.getId());
+            dto.setDateTime(entity.getDateTime());
+            dto.setMusic(getMusicFrom(entity.getMusic()));
+            dto.setUser(getUserFrom(entity.getUser()));
+            dto.setValue(entity.getValue());
+            list.add(dto);
+        }
+        return list;
+    }
+
+
 
     private void addAllFilmMusic(List<FilmMusicEntity> from, List<FilmMusic> to ) {
         for(FilmMusicEntity entry : from) {
@@ -149,18 +190,22 @@ public class MobileService {
         return update;
     }
 
-    @GET
-    @Path("update/{date}")
-    public UpdateResponse getUpdates(@PathParam("date") String date) {
+    private Date parseDate(String date) {
         final DateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
-        Date lastUpdate = null;
+        Date parsedDate = null;
 
         try {
-            lastUpdate = dateFormat.parse(date);
+            parsedDate = dateFormat.parse(date);
         } catch (ParseException e) {
             e.printStackTrace();
         }
+        return parsedDate;
+    }
 
+    @GET
+    @Path("update/{date}")
+    public UpdateResponse getUpdates(@PathParam("date") Long date) {
+        Date lastUpdate = new Date(date);
         List<FilmHistoryEntity> addHistories = filmBean.getFilmHistoryAfterDateByMethod(lastUpdate, Method.ADD);
         Update additions = getUpdates(addHistories);
         List<FilmHistoryEntity> deleteHistories = filmBean.getFilmHistoryAfterDateByMethod(lastUpdate, Method.DELETE);
@@ -209,17 +254,50 @@ public class MobileService {
         manager.startWhatsong();
     }
 
+    private void saveFavorites(List<Favorites> favorites, Date updateDate) {
+        for(Favorites dto : favorites) {
+            FavoritesEntity entity = new FavoritesEntity();
+            entity.setId(dto.getId());
+            entity.setDateTime(updateDate);
+            entity.setMusic(musicBean.getMusic(dto.getId()));
+            entity.setUser(userBean.getUser(dto.getUser().getId()));
+            userBean.saveFavorites(entity);
+        }
+    }
+
+    private void saveMusicRating(List<MusicRating> musicRatings, Date updateDate) {
+        for(MusicRating dto : musicRatings) {
+            MusicRatingEntity entity = new MusicRatingEntity();
+            entity.setId(dto.getId());
+            entity.setDateTime(updateDate);
+            entity.setMusic(musicBean.getMusic(dto.getId()));
+            entity.setUser(userBean.getUser(dto.getUser().getId()));
+            entity.setValue(dto.getValue());
+            userBean.saveMusicRating(entity);
+        }
+    }
+
     @GET
     @Path("user/{id}/{date}")
-    public void getUserData(@PathParam("id") Long userId, @PathParam("date") String date) {
-
-
+    public UserData getUserData(@PathParam("id") int userId, @PathParam("date") Long date) {
+        UserData userData = new UserData();
+        Date updateDate = new Date(date);
+        List<Favorites> favorites= getFavoritesFrom(userBean.getFavoritesByUser(userId, updateDate));
+        List<MusicRating> musicRatings = getMusicRatingFrom(userBean.getRatingsByUser(userId, updateDate));
+        userData.setFavorites(favorites);
+        userData.setMusicRating(musicRatings);
+        if (!favorites.isEmpty())
+            System.out.println(favorites.get(0).getDateTime().getTime());
+        return userData;
     }
 
     @POST
-    @Path("user/{id}/")
-    public void setUserData(@PathParam("id") Long userId, UserData userData) {
-        //@TODO
+    @Path("user/{id}")
+    public Date setUserData(@PathParam("id") Long userId, UserData userData) {
+        Date updateDate = new Date();
+        saveFavorites(userData.getFavorites(), updateDate);
+        saveMusicRating(userData.getMusicRating(), updateDate);
+        return updateDate;
     }
 
 }
